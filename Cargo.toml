@@ -18,3 +18,4 @@ ethers = { version = "2", features = ["rustls"] }  # wallet signing
 chrono = { version = "0.4", features = ["serde"] }
 dashmap = "5"                       # concurrent hashmap for state
 crossbeam-channel = "0.5"          # fast inter-thread messaging
+futures-util = "0.3"               # stream extensions for WebSocket
