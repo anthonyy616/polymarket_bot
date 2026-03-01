@@ -40,7 +40,7 @@ impl BinanceFeed {
         Self { url, sender }
     }
 
-    pub async fn connect(&self) {
+    pub async fn run(&self) {
         loop {
             info!("Connecting to Binance WebSocket: {}", self.url);
             match connect_async(&self.url).await {

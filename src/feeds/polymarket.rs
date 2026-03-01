@@ -36,7 +36,7 @@ impl PolymarketFeed {
         }
     }
 
-    pub async fn poll(&self) {
+    pub async fn run(&self) {
         info!("Starting Polymarket HTTP poller at {} every {}ms", self.url, self.poll_interval_ms);
         let endpoint = format!("{}/markets", self.url);
 
