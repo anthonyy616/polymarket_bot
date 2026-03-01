@@ -1,0 +1,1 @@
+// ArbSignal enum definition

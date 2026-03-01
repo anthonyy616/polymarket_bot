@@ -1,0 +1,23 @@
+# Rust
+/target
+Cargo.lock
+
+# IDE/System
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Environment / Secret
+.env
+.env.example
+.env.local
+
+# Project Specific
+/logs
+/trades.csv
+config/*.toml
+!config/default.toml
+
+implementation.md
+rules.md

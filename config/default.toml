@@ -1,0 +1,14 @@
+# polyarb default configuration
+
+[strategy]
+edge_threshold_pct = 0.3
+poll_interval_ms = 500
+stale_threshold_ms = 200
+
+[risk]
+max_position_usdc = 20.0
+max_daily_loss_usdc = 50.0
+max_concurrent_positions = 3
+
+[execution]
+simulation_mode = true
