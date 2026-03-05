@@ -12,7 +12,7 @@ slippage_tolerance_pct = 0.001
 
 [feeds]
 binance_ws_url = "wss://stream.binance.com:9443/ws/btcusdt@trade"
-polymarket_api_url = "https://clob.polymarket.com"
+polymarket_api_url = "https://gamma-api.polymarket.com"
 polymarket_poll_interval_ms = 500
 
 [api]

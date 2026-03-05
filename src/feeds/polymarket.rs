@@ -45,7 +45,17 @@ impl PolymarketFeed {
             let timestamp_us = start.duration_since(UNIX_EPOCH).unwrap().as_micros() as u64;
 
             // Fetch BTC markets. Appending query param for broader search
-            match self.client.get(&endpoint).query(&[("question", "BTC")]).send().await {
+            match self.client
+                .get(&endpoint)
+                .query(&[
+                    ("closed", "false"),
+                    ("active", "true"),
+                    ("tag_slug", "crypto"),
+                    ("limit", "50"),
+                ])
+                .send()
+                .await
+            {
                 Ok(response) => {
                     if response.status().is_success() {
                         if let Ok(json) = response.json::<Value>().await {
@@ -56,6 +66,11 @@ impl PolymarketFeed {
                             // Extract data via Value mapping to gracefully handle mismatches.
                             if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
                                 for market in data {
+                                    let is_closed = market.get("closed").and_then(|v| v.as_bool()).unwrap_or(true);
+                                    if is_closed {
+                                        continue;
+                                    }
+
                                     let question = market
                                         .get("question")
                                         .and_then(|q| q.as_str())
@@ -63,7 +78,8 @@ impl PolymarketFeed {
                                         .to_string();
 
                                     // Secondary check to ensure it's BTC related.
-                                    if !question.to_uppercase().contains("BTC") {
+                                    let q = question.to_uppercase();
+                                    if !q.contains("BTC") && !q.contains("BITCOIN") {
                                         continue;
                                     }
 
