@@ -34,7 +34,11 @@ impl Executor {
                 && std::env::var("CONFIRM_LIVE").unwrap_or_default() == "yes";
                 
             if live_active {
-                todo!("LIVE MODE: Sign and submit order to Polymarket CLOB. Request POST to /order");
+                tracing::error!(
+                    "LIVE MODE IS NOT YET IMPLEMENTED. \
+                     Unset LIVE_MODE and CONFIRM_LIVE to use simulation."
+                );
+                return;
             } else {
                 info!("Live mode requested but LIVE_MODE=true and CONFIRM_LIVE=yes not set. Defaulting to simulation.");
                 self.simulate_execution(signal, size_usdc).await;
