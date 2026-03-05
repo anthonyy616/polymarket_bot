@@ -21,3 +21,6 @@ config/*.toml
 
 implementation.md
 rules.md
+
+logs/
+target/

@@ -1,26 +1,22 @@
 [risk]
-arb_threshold_pct = 0.003        # 0.3% minimum edge to trigger
-max_position_usdc = 20.0         # max $20 per trade (conservative for <$1K)
-max_daily_loss_usdc = 50.0       # 2% of $500 starting capital
+arb_threshold_pct = 0.003
+max_position_usdc = 20.0
+max_daily_loss_usdc = 50.0
 max_concurrent_positions = 3
 starting_capital_usdc = 500.0
 
 [execution]
-simulation_mode = true           # ALWAYS start true
+simulation_mode = true
 order_timeout_ms = 5000
 slippage_tolerance_pct = 0.001
 
 [feeds]
 binance_ws_url = "wss://stream.binance.com:9443/ws/btcusdt@trade"
 polymarket_api_url = "https://clob.polymarket.com"
-polymarket_poll_interval_ms = 500   # poll Polymarket prices every 500ms
+polymarket_poll_interval_ms = 500
 
 [api]
 polymarket_key = ""
 polymarket_secret = ""
 polymarket_passphrase = ""
 wallet_private_key = ""
-
-target_tokens = [
-    # Add target Polymarket token IDs here
-]

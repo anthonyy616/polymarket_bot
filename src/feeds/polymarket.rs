@@ -49,6 +49,7 @@ impl PolymarketFeed {
                 Ok(response) => {
                     if response.status().is_success() {
                         if let Ok(json) = response.json::<Value>().await {
+                            tracing::debug!("Raw Polymarket response: {:?}", json);
                             let mut contracts = Vec::new();
 
                             // The Polymarket CLOB structure can contain arbitrary tokens
