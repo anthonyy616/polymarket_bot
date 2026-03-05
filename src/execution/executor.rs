@@ -1,19 +1,23 @@
 use crate::config::Config;
 use crate::engine::signal::ArbSignal;
+use crate::logger::{PnlTracker, TradeRecord};
 use crate::risk::{manager::RiskManager, RiskDecision};
+use chrono::Local;
 use std::sync::Arc;
 use tracing::info;
 
 pub struct Executor {
     config: Arc<Config>,
     risk_manager: Arc<RiskManager>,
+    pnl_tracker: Arc<PnlTracker>,
 }
 
 impl Executor {
-    pub fn new(config: Arc<Config>, risk_manager: Arc<RiskManager>) -> Self {
+    pub fn new(config: Arc<Config>, risk_manager: Arc<RiskManager>, pnl_tracker: Arc<PnlTracker>) -> Self {
         Self {
             config,
             risk_manager,
+            pnl_tracker,
         }
     }
 
@@ -47,7 +51,7 @@ impl Executor {
     }
 
     async fn simulate_execution(&self, signal: &ArbSignal, size_usdc: f64) {
-        match signal {
+        let (token_id, edge_pct, direction) = match signal {
             ArbSignal::BuyYes { token_id, edge_pct, reason, .. } => {
                 info!(
                     "[SIM] BUY YES {} | edge: {:.3}% | size: ${:.2} | {}",
@@ -56,7 +60,7 @@ impl Executor {
                     size_usdc,
                     reason
                 );
-                self.risk_manager.record_fill(token_id.clone(), size_usdc);
+                (token_id.clone(), *edge_pct, "BuyYes")
             }
             ArbSignal::BuyNo { token_id, edge_pct, reason, .. } => {
                 info!(
@@ -66,9 +70,24 @@ impl Executor {
                     size_usdc,
                     reason
                 );
-                self.risk_manager.record_fill(token_id.clone(), size_usdc);
+                (token_id.clone(), *edge_pct, "BuyNo")
             }
-            ArbSignal::NoSignal => {}
-        }
+            ArbSignal::NoSignal => return,
+        };
+
+        self.risk_manager.record_fill(token_id.clone(), size_usdc);
+
+        self.pnl_tracker.record_trade(TradeRecord {
+            timestamp: Local::now().format("%Y-%m-%dT%H:%M:%S%.3f").to_string(),
+            token_id,
+            direction: direction.to_string(),
+            size_usdc,
+            entry_price: 0.0,  // Simulated — no real fill price
+            exit_price: 0.0,
+            pnl_usdc: 0.0,     // Unknown until position closes
+            edge_pct_at_entry: edge_pct,
+            staleness_ms: 0.0, // TODO: pass from signal metadata
+            signal_to_order_ms: 0.0,
+        });
     }
 }

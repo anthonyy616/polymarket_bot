@@ -1,4 +1,4 @@
-use chrono::{Local, NaiveDate};
+use chrono::Local;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;

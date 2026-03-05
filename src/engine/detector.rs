@@ -3,7 +3,7 @@ use crate::engine::signal::ArbSignal;
 use crate::engine::state::MarketState;
 use crate::feeds::binance::PriceUpdate;
 use crate::feeds::polymarket::MarketSnapshot;
-use crossbeam_channel::Sender;
+use tokio::sync::mpsc;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
@@ -14,7 +14,7 @@ pub struct Detector {
     market_state: Arc<MarketState>,
     binance_rx: broadcast::Receiver<PriceUpdate>,
     polymarket_rx: broadcast::Receiver<MarketSnapshot>,
-    signal_tx: Sender<ArbSignal>,
+    signal_tx: mpsc::UnboundedSender<ArbSignal>,
 }
 
 impl Detector {
@@ -23,7 +23,7 @@ impl Detector {
         market_state: Arc<MarketState>,
         binance_rx: broadcast::Receiver<PriceUpdate>,
         polymarket_rx: broadcast::Receiver<MarketSnapshot>,
-        signal_tx: Sender<ArbSignal>,
+        signal_tx: mpsc::UnboundedSender<ArbSignal>,
     ) -> Self {
         Self {
             config,

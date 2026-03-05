@@ -7,7 +7,7 @@ use polyarb::engine::{
 use polyarb::feeds::{binance::PriceUpdate, polymarket::MarketSnapshot};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use crossbeam_channel::unbounded;
+use tokio::sync::mpsc;
 use tokio::sync::broadcast;
 
 fn create_test_config(threshold_pct: f64) -> Arc<Config> {
@@ -54,7 +54,7 @@ async fn test_no_signal_when_fresh() {
 
     let (_binance_tx, binance_rx) = broadcast::channel(10);
     let (poly_tx, poly_rx) = broadcast::channel(10);
-    let (signal_tx, signal_rx) = unbounded();
+    let (signal_tx, mut signal_rx) = mpsc::unbounded_channel();
 
     let detector = Detector::new(config, state.clone(), binance_rx, poly_rx, signal_tx);
     detector.start();
@@ -89,7 +89,7 @@ async fn test_buy_yes_signal() {
 
     let (binance_tx, binance_rx) = broadcast::channel(10);
     let (_poly_tx, poly_rx) = broadcast::channel(10);
-    let (signal_tx, signal_rx) = unbounded();
+    let (signal_tx, mut signal_rx) = mpsc::unbounded_channel();
 
     let detector = Detector::new(config, state.clone(), binance_rx, poly_rx, signal_tx);
     detector.start();
@@ -133,7 +133,7 @@ async fn test_buy_no_signal() {
 
     let (binance_tx, binance_rx) = broadcast::channel(10);
     let (_poly_tx, poly_rx) = broadcast::channel(10);
-    let (signal_tx, signal_rx) = unbounded();
+    let (signal_tx, mut signal_rx) = mpsc::unbounded_channel();
 
     let detector = Detector::new(config, state.clone(), binance_rx, poly_rx, signal_tx);
     detector.start();
@@ -174,7 +174,7 @@ async fn test_below_threshold() {
 
     let (binance_tx, binance_rx) = broadcast::channel(10);
     let (_poly_tx, poly_rx) = broadcast::channel(10);
-    let (signal_tx, signal_rx) = unbounded();
+    let (signal_tx, mut signal_rx) = mpsc::unbounded_channel();
 
     let detector = Detector::new(config, state.clone(), binance_rx, poly_rx, signal_tx);
     detector.start();
