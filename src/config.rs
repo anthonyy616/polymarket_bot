@@ -8,6 +8,7 @@ pub struct RiskConfig {
     pub max_position_usdc: f64,
     pub max_daily_loss_usdc: f64,
     pub max_concurrent_positions: usize,
+    pub starting_capital_usdc: f64,
 }
 
 #[derive(Debug, Deserialize, Clone)]

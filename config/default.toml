@@ -3,6 +3,7 @@ arb_threshold_pct = 0.003        # 0.3% minimum edge to trigger
 max_position_usdc = 20.0         # max $20 per trade (conservative for <$1K)
 max_daily_loss_usdc = 50.0       # 2% of $500 starting capital
 max_concurrent_positions = 3
+starting_capital_usdc = 500.0
 
 [execution]
 simulation_mode = true           # ALWAYS start true

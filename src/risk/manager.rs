@@ -26,12 +26,13 @@ pub struct RiskManager {
 
 impl RiskManager {
     pub fn new(config: Arc<Config>) -> Self {
+        let starting_capital = config.risk.starting_capital_usdc;
         Self {
             config,
             daily_pnl: RwLock::new(0.0),
             open_positions: DashMap::new(),
             total_deployed_usdc: RwLock::new(0.0),
-            available_capital: RwLock::new(500.0), // Assumed starting capital
+            available_capital: RwLock::new(starting_capital),
         }
     }
 
@@ -97,7 +98,11 @@ impl RiskManager {
         let mut total = self.total_deployed_usdc.write().unwrap();
         *total += size_usdc;
         
-        info!("Recorded fill for token. Total deployed: {}", *total);
+        // Deduct from available capital
+        let mut cap = self.available_capital.write().unwrap();
+        *cap -= size_usdc;
+        
+        info!("Recorded fill for token. Total deployed: {}, Available Cap: {}", *total, *cap);
     }
 
     pub fn record_close(&self, token_id: &str, pnl_usdc: f64) {
