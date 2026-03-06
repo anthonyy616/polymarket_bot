@@ -77,13 +77,14 @@ impl PolymarketFeed {
                                     .unwrap_or("")
                                     .to_string();
 
-                                let accepting = market
-                                    .get("acceptingOrders")
-                                    .and_then(|v| v.as_bool())
-                                    .unwrap_or(false);
-                                if !accepting {
-                                    continue;
-                                }
+                                if slug == current_slug {
+                                    let accepting = market.get("acceptingOrders").and_then(|v| v.as_bool()).unwrap_or(false);
+                                    let yes_p = // extract outcomePrices[0] inline
+                                    info!("Matched slug: acceptingOrders={} | outcomePrices raw={:?}", 
+                                        accepting,
+                                        market.get("outcomePrices")
+                                    );
+}
                                 // clobTokenIds — try as array first, then as JSON string
                                 let token_ids: Vec<String> = market
                                     .get("clobTokenIds")
