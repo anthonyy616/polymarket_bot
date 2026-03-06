@@ -15,6 +15,8 @@ pub struct ContractState {
 pub struct MarketState {
     pub btc_spot_price: RwLock<f64>,
     pub btc_spot_updated_us: RwLock<u64>,
+    pub btc_window_start_price: RwLock<f64>,
+    pub btc_window_start_timestamp: RwLock<u64>,
     pub contracts: DashMap<String, ContractState>,
 }
 
@@ -29,6 +31,8 @@ impl MarketState {
         Self {
             btc_spot_price: RwLock::new(0.0),
             btc_spot_updated_us: RwLock::new(0),
+            btc_window_start_price: RwLock::new(0.0),
+            btc_window_start_timestamp: RwLock::new(0),
             contracts: DashMap::new(),
         }
     }
@@ -40,6 +44,23 @@ impl MarketState {
         if let Ok(mut lock) = self.btc_spot_updated_us.write() {
             *lock = timestamp_us;
         }
+
+        // Track 15m window start price
+        let timestamp_secs = timestamp_us / 1_000_000;
+        let window_start = (timestamp_secs / 900) * 900;
+        
+        if let Ok(mut lock_ts) = self.btc_window_start_timestamp.write() {
+            if *lock_ts != window_start {
+                *lock_ts = window_start;
+                // Clear stale contracts from previous window
+                self.contracts.clear();
+                
+                if let Ok(mut lock_px) = self.btc_window_start_price.write() {
+                    *lock_px = price;
+                    tracing::info!("New 15m window started at {}: Spot={}", window_start, price);
+                }
+            }
+        }
     }
 
     pub fn update_contract(
@@ -50,6 +71,7 @@ impl MarketState {
         no_price: f64,
         timestamp_us: u64,
     ) {
+        // For Up/Down markets, yes_price is the probability
         let implied_btc_price = compute_implied_btc_price(&question, yes_price);
 
         self.contracts.insert(
@@ -66,21 +88,8 @@ impl MarketState {
     }
 }
 
-pub fn compute_implied_btc_price(question: &str, yes_price: f64) -> Option<f64> {
-    if yes_price <= 0.0 || yes_price >= 1.0 {
-        return None;
-    }
-
-    let mut strike = None;
-    if let Some(dollar_idx) = question.find('$') {
-        let remainder = &question[dollar_idx + 1..];
-        let end_idx = remainder.find(|c: char| !c.is_ascii_digit() && c != ',').unwrap_or(remainder.len());
-        let number_str = &remainder[..end_idx];
-        let clean_number_str = number_str.replace(',', "");
-        if let Ok(val) = clean_number_str.parse::<f64>() {
-            strike = Some(val);
-        }
-    }
-
-    strike.map(|s| s * yes_price / 0.5)
+pub fn compute_implied_btc_price(_question: &str, yes_price: f64) -> Option<f64> {
+    // For 15M markets, we return the probability (0..1) as the "implied price"
+    // to be used by the detector for directional scoring.
+    Some(yes_price)
 }

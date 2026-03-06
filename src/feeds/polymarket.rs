@@ -42,36 +42,40 @@ impl PolymarketFeed {
 
         loop {
             let start = SystemTime::now();
-            let timestamp_us = start.duration_since(UNIX_EPOCH).unwrap().as_micros() as u64;
+            let now_secs = start.duration_since(UNIX_EPOCH).unwrap().as_secs();
+            let timestamp_us = (now_secs * 1_000_000) as u64;
+
+            // Compute current 15-min window start
+            let window_start = (now_secs / 900) * 900;
+            let current_slug = format!("btc-updown-15m-{}", window_start);
 
             match self.client
                 .get(&endpoint)
                 .query(&[
                     ("active", "true"),
                     ("closed", "false"),
-                    ("tag_slug", "crypto"),
-                    ("limit", "50"),
+                    ("slug", &current_slug),
+                    ("limit", "5"),
                 ])
                 .send().await
             {
                 Ok(response) if response.status().is_success() => {
                     match response.json::<Vec<serde_json::Value>>().await {
                         Ok(markets) => {
+                            tracing::info!("Gamma API returned {} markets, target slug={}", markets.len(), current_slug);
                             let mut contracts = Vec::new();
 
                             for market in &markets {
+                                let slug = market.get("slug").and_then(|v| v.as_str()).unwrap_or("");
+                                if slug != current_slug {
+                                    continue;
+                                }
+
                                 let question = market
                                     .get("question")
                                     .and_then(|v| v.as_str())
                                     .unwrap_or("")
                                     .to_string();
-                                //temporary line for debug
-                            tracing::info!("Market found: {}", question);
-
-                                let q = question.to_uppercase();
-                                if !q.contains("BTC") && !q.contains("BITCOIN") {
-                                    continue;
-                                }
 
                                 let accepting = market
                                     .get("acceptingOrders")
@@ -80,7 +84,6 @@ impl PolymarketFeed {
                                 if !accepting {
                                     continue;
                                 }
-
                                 // clobTokenIds — try as array first, then as JSON string
                                 let token_ids: Vec<String> = market
                                     .get("clobTokenIds")
@@ -123,14 +126,11 @@ impl PolymarketFeed {
                                 let no_price = prices.get(1).copied().unwrap_or(0.0);
 
                                 if yes_token_id.is_empty() || yes_price <= 0.0 {
-                                    tracing::debug!(
-                                        "Skipping BTC market with no valid price: {}", question
-                                    );
                                     continue;
                                 }
 
                                 tracing::info!(
-                                    "Found BTC market: {} | yes: {} | no: {}",
+                                    "Found 15M market: {} | Yes prob: {} | No prob: {}",
                                     question, yes_price, no_price
                                 );
 
@@ -145,8 +145,6 @@ impl PolymarketFeed {
 
                             if !contracts.is_empty() {
                                 let _ = self.sender.send(MarketSnapshot { contracts });
-                            } else {
-                                tracing::warn!("No active BTC markets found in this poll");
                             }
                         }
                         Err(e) => tracing::warn!("Failed to parse gamma API response: {}", e),
