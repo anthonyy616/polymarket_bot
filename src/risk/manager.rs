@@ -114,7 +114,7 @@ impl RiskManager {
             *daily += pnl_usdc;
 
             let mut cap = self.available_capital.write().unwrap();
-            *cap += pnl_usdc;
+            *cap += pos.entry_size_usdc + pnl_usdc;
 
             info!(
                 "Closed position for token {}. PnL: {}, Daily PnL: {}, Total deployed: {}", 

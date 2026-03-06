@@ -1,9 +1,8 @@
 use reqwest::Client;
-use serde_json::Value;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 use tokio::time::{sleep, Duration};
-use tracing::{error, info, warn};
+use tracing::info;
 
 #[derive(Debug, Clone)]
 pub struct ContractPrice {
@@ -77,14 +76,14 @@ impl PolymarketFeed {
                                     .unwrap_or("")
                                     .to_string();
 
-                                if slug == current_slug {
-                                    let accepting = market.get("acceptingOrders").and_then(|v| v.as_bool()).unwrap_or(false);
-                                    let yes_p = // extract outcomePrices[0] inline
-                                    info!("Matched slug: acceptingOrders={} | outcomePrices raw={:?}", 
-                                        accepting,
-                                        market.get("outcomePrices")
-                                    );
-}
+                                let accepting = market
+                                    .get("acceptingOrders")
+                                    .and_then(|v| v.as_bool())
+                                    .unwrap_or(false);
+                                if !accepting {
+                                    continue;
+                                }
+
                                 // clobTokenIds — try as array first, then as JSON string
                                 let token_ids: Vec<String> = market
                                     .get("clobTokenIds")
@@ -94,7 +93,14 @@ impl PolymarketFeed {
                                                 .filter_map(|t| t.as_str().map(String::from))
                                                 .collect())
                                         } else if let Some(s) = v.as_str() {
-                                            serde_json::from_str(s).ok()
+                                            // Handle JSON string of array of strings or numbers
+                                            if let Ok(raw_arr) = serde_json::from_str::<Vec<serde_json::Value>>(s) {
+                                                Some(raw_arr.iter()
+                                                    .filter_map(|v| v.as_str().map(String::from).or_else(|| v.as_u64().map(|n| n.to_string())))
+                                                    .collect())
+                                            } else {
+                                                None
+                                            }
                                         } else {
                                             None
                                         }
@@ -114,7 +120,16 @@ impl PolymarketFeed {
                                                 })
                                                 .collect())
                                         } else if let Some(s) = v.as_str() {
-                                            serde_json::from_str(s).ok()
+                                            // Handle JSON string of array of strings
+                                            if let Ok(raw_arr) = serde_json::from_str::<Vec<serde_json::Value>>(s) {
+                                                Some(raw_arr.iter()
+                                                    .filter_map(|p| {
+                                                        p.as_f64().or_else(|| p.as_str()?.parse().ok())
+                                                    })
+                                                    .collect())
+                                            } else {
+                                                None
+                                            }
                                         } else {
                                             None
                                         }

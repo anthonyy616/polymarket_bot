@@ -25,15 +25,21 @@ impl SignalStrength {
 pub enum ArbSignal {
     BuyYes {
         token_id: String,
+        price: f64,
         edge_pct: f64,
         recommended_size_usdc: f64,
         reason: String,
+        created_at_us: u64,
+        staleness_ms: u64,
     },
     BuyNo {
         token_id: String,
+        price: f64,
         edge_pct: f64,
         recommended_size_usdc: f64,
         reason: String,
+        created_at_us: u64,
+        staleness_ms: u64,
     },
     NoSignal,
 }

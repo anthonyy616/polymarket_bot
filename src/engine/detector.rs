@@ -9,12 +9,15 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 use tracing::{debug, info};
 
+use dashmap::DashMap;
+
 pub struct Detector {
     config: Arc<Config>,
     market_state: Arc<MarketState>,
     binance_rx: broadcast::Receiver<PriceUpdate>,
     polymarket_rx: broadcast::Receiver<MarketSnapshot>,
     signal_tx: mpsc::UnboundedSender<ArbSignal>,
+    last_signal_us: DashMap<String, u64>,
 }
 
 impl Detector {
@@ -31,6 +34,7 @@ impl Detector {
             binance_rx,
             polymarket_rx,
             signal_tx,
+            last_signal_us: DashMap::new(),
         }
     }
 
@@ -70,7 +74,7 @@ impl Detector {
         }
 
         let move_pct = (btc_spot - btc_window_px) / btc_window_px;
-        let threshold = 0.003; // 0.3% as per plan
+        let threshold = self.config.risk.arb_threshold_pct;
 
         let current_time_us = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -79,7 +83,14 @@ impl Detector {
 
         for contract_entry in self.market_state.contracts.iter() {
             let contract = contract_entry.value();
-            let yes_prob = contract.yes_price; // probability is stored in implied_btc_price or yes_price
+            let yes_prob = contract.yes_price;
+
+            // Signal cooldown: 60 seconds
+            if let Some(last_us) = self.last_signal_us.get(&contract.token_id) {
+                if current_time_us - *last_us < 60_000_000 {
+                    continue;
+                }
+            }
 
             let staleness_us = current_time_us.saturating_sub(contract.last_polymarket_update_us);
             if staleness_us <= 200_000 {
@@ -88,20 +99,27 @@ impl Detector {
 
             let mut signal = ArbSignal::NoSignal;
             let recommended_size = self.config.risk.max_position_usdc;
+            let staleness_ms = staleness_us / 1000;
 
             if move_pct > threshold && yes_prob <= 0.5 {
                 signal = ArbSignal::BuyYes {
                     token_id: contract.token_id.clone(),
+                    price: contract.yes_price,
                     edge_pct: move_pct,
                     recommended_size_usdc: recommended_size,
                     reason: format!("Binance UP {:.2}%, Polymarket Yes Prob {:.2}", move_pct * 100.0, yes_prob),
+                    created_at_us: current_time_us,
+                    staleness_ms,
                 };
             } else if move_pct < -threshold && yes_prob >= 0.5 {
                 signal = ArbSignal::BuyNo {
                     token_id: contract.token_id.clone(),
+                    price: contract.no_price,
                     edge_pct: move_pct.abs(),
                     recommended_size_usdc: recommended_size,
                     reason: format!("Binance DOWN {:.2}%, Polymarket Yes Prob {:.2}", move_pct * 100.0, yes_prob),
+                    created_at_us: current_time_us,
+                    staleness_ms,
                 };
             }
 
@@ -114,6 +132,7 @@ impl Detector {
                     yes_prob = yes_prob,
                     "Signal emitted: {:?}", signal
                 );
+                self.last_signal_us.insert(contract.token_id.clone(), current_time_us);
                 let _ = self.signal_tx.send(signal);
             }
         }

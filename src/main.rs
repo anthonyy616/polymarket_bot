@@ -36,8 +36,14 @@ async fn main() -> anyhow::Result<()> {
     // 6. PnL tracker
     let pnl_tracker = Arc::new(PnlTracker::new("logs"));
 
-    // 7. Executor (with pnl_tracker wired in)
-    let executor = Arc::new(Executor::new(config.clone(), risk_manager.clone(), pnl_tracker.clone()));
+    // 7. Executor (with pnl_tracker and market_state wired in)
+    let executor = Arc::new(Executor::new(
+        config.clone(), 
+        risk_manager.clone(), 
+        pnl_tracker.clone(),
+        market_state.clone(),
+    ));
+    executor.clone().start_monitor();
 
     // --- Spawn tasks ---
 

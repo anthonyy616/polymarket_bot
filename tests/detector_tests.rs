@@ -96,7 +96,13 @@ async fn test_buy_yes_signal() {
 
     // Setup state
     let now = current_time_us();
-    
+
+    // Setup state
+    let now = current_time_us();
+
+    // Seed window price baseline (moves spot from 0 -> 70k, sets window start)
+    state.update_spot(70_000.0, now - 60_000_000); 
+
     // contract implies $70,000, staleness = 800ms
     state.update_contract(
         "token_1".to_string(),
@@ -106,7 +112,7 @@ async fn test_buy_yes_signal() {
         now - 800_000,
     );
     
-    // Spot is 70,500
+    // Update spot to 70,500
     state.update_spot(70_500.0, now);
 
     // Trigger detection manually
@@ -140,7 +146,10 @@ async fn test_buy_no_signal() {
 
     // Setup state
     let now = current_time_us();
-    
+
+    // Seed window price baseline
+    state.update_spot(70_000.0, now - 60_000_000); 
+
     // contract implies $70,000, staleness = 800ms 
     state.update_contract(
         "token_2".to_string(),
@@ -149,8 +158,8 @@ async fn test_buy_no_signal() {
         0.5,
         now - 800_000,
     );
-
-    // Spot is 69,500
+    
+    // Update spot to 69,500
     state.update_spot(69_500.0, now);
 
     let _ = binance_tx.send(PriceUpdate { source: "bin".into(), price: 69_500.0, timestamp_us: now });
@@ -181,10 +190,10 @@ async fn test_below_threshold() {
 
     // Setup state
     let now = current_time_us();
-    
-    // Spot is 70,100
-    state.update_spot(70_100.0, now);
-    
+
+    // Seed window price
+    state.update_spot(70_000.0, now - 60_000_000);
+
     // contract implies $70,000. 100 / 70100 ≈ 0.14% edge (below threshold 0.3%)
     state.update_contract(
         "token_3".to_string(),
@@ -193,6 +202,9 @@ async fn test_below_threshold() {
         0.5,
         now - 800_000,
     );
+
+    // Update spot to 70,100
+    state.update_spot(70_100.0, now);
 
     let _ = binance_tx.send(PriceUpdate { source: "bin".into(), price: 70_100.0, timestamp_us: now });
     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
