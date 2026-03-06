@@ -44,97 +44,116 @@ impl PolymarketFeed {
             let start = SystemTime::now();
             let timestamp_us = start.duration_since(UNIX_EPOCH).unwrap().as_micros() as u64;
 
-            // Fetch BTC markets. Appending query param for broader search
             match self.client
                 .get(&endpoint)
                 .query(&[
-                    ("closed", "false"),
                     ("active", "true"),
+                    ("closed", "false"),
                     ("tag_slug", "crypto"),
                     ("limit", "50"),
                 ])
-                .send()
-                .await
+                .send().await
             {
-                Ok(response) => {
-                    if response.status().is_success() {
-                        if let Ok(json) = response.json::<Value>().await {
-                            tracing::debug!("Raw Polymarket response: {:?}", json);
+                Ok(response) if response.status().is_success() => {
+                    match response.json::<Vec<serde_json::Value>>().await {
+                        Ok(markets) => {
                             let mut contracts = Vec::new();
 
-                            // The Polymarket CLOB structure can contain arbitrary tokens
-                            // Extract data via Value mapping to gracefully handle mismatches.
-                            if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
-                                for market in data {
-                                    let is_closed = market.get("closed").and_then(|v| v.as_bool()).unwrap_or(true);
-                                    if is_closed {
-                                        continue;
-                                    }
+                            for market in &markets {
+                                let question = market
+                                    .get("question")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .to_string();
+                                //temporary line for debug
+                            tracing::info!("Market found: {}", question);
 
-                                    let question = market
-                                        .get("question")
-                                        .and_then(|q| q.as_str())
-                                        .unwrap_or("Unknown")
-                                        .to_string();
-
-                                    // Secondary check to ensure it's BTC related.
-                                    let q = question.to_uppercase();
-                                    if !q.contains("BTC") && !q.contains("BITCOIN") {
-                                        continue;
-                                    }
-
-                                    let mut token_id = String::new();
-                                    let mut yes_price = 0.0;
-                                    let mut no_price = 0.0;
-
-                                    if let Some(tokens_array) = market.get("tokens").and_then(|t| t.as_array()) {
-                                        for token in tokens_array {
-                                            let outcome = token.get("outcome").and_then(|o| o.as_str()).unwrap_or("");
-                                            let price = token.get("price").and_then(|p| p.as_f64()).unwrap_or(0.0);
-                                            // Fallback for bid/ask usage if general price empty
-                                            let best_bid = token.get("best_bid").and_then(|p| p.as_f64()).unwrap_or(0.0);
-                                            let best_ask = token.get("best_ask").and_then(|p| p.as_f64()).unwrap_or(0.0);
-                                            
-                                            // Prefer current standard definition of price if it is valid, fallback to ask/bid bounds
-                                            let final_price = if price > 0.0 { price } else { best_ask.max(best_bid) };
-
-                                            if outcome.eq_ignore_ascii_case("yes") {
-                                                yes_price = final_price;
-                                                token_id = token.get("token_id").and_then(|t| t.as_str()).unwrap_or("").to_string();
-                                            } else if outcome.eq_ignore_ascii_case("no") {
-                                                no_price = final_price;
-                                            }
-                                        }
-                                    }
-                                    
-                                    // Use best prices derived from market if tokens aren't labeled YES/NO directly.
-                                    // For robustness we populate the expected fields from the object regardless of structure.
-                                    if !token_id.is_empty() {
-                                        contracts.push(ContractPrice {
-                                            token_id,
-                                            question,
-                                            yes_price,
-                                            no_price,
-                                            fetched_at_us: timestamp_us,
-                                        });
-                                    }
+                                let q = question.to_uppercase();
+                                if !q.contains("BTC") && !q.contains("BITCOIN") {
+                                    continue;
                                 }
+
+                                let accepting = market
+                                    .get("acceptingOrders")
+                                    .and_then(|v| v.as_bool())
+                                    .unwrap_or(false);
+                                if !accepting {
+                                    continue;
+                                }
+
+                                // clobTokenIds — try as array first, then as JSON string
+                                let token_ids: Vec<String> = market
+                                    .get("clobTokenIds")
+                                    .and_then(|v| {
+                                        if let Some(arr) = v.as_array() {
+                                            Some(arr.iter()
+                                                .filter_map(|t| t.as_str().map(String::from))
+                                                .collect())
+                                        } else if let Some(s) = v.as_str() {
+                                            serde_json::from_str(s).ok()
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .unwrap_or_default();
+
+                                // outcomePrices — try as array first, then as JSON string
+                                let prices: Vec<f64> = market
+                                    .get("outcomePrices")
+                                    .and_then(|v| {
+                                        if let Some(arr) = v.as_array() {
+                                            Some(arr.iter()
+                                                .filter_map(|p| {
+                                                    p.as_f64().or_else(|| {
+                                                        p.as_str()?.parse().ok()
+                                                    })
+                                                })
+                                                .collect())
+                                        } else if let Some(s) = v.as_str() {
+                                            serde_json::from_str(s).ok()
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .unwrap_or_default();
+
+                                // Per docs: index 0 = Yes token, index 1 = No token
+                                let yes_token_id = token_ids.get(0).cloned().unwrap_or_default();
+                                let yes_price = prices.get(0).copied().unwrap_or(0.0);
+                                let no_price = prices.get(1).copied().unwrap_or(0.0);
+
+                                if yes_token_id.is_empty() || yes_price <= 0.0 {
+                                    tracing::debug!(
+                                        "Skipping BTC market with no valid price: {}", question
+                                    );
+                                    continue;
+                                }
+
+                                tracing::info!(
+                                    "Found BTC market: {} | yes: {} | no: {}",
+                                    question, yes_price, no_price
+                                );
+
+                                contracts.push(ContractPrice {
+                                    token_id: yes_token_id,
+                                    question,
+                                    yes_price,
+                                    no_price,
+                                    fetched_at_us: timestamp_us,
+                                });
                             }
 
                             if !contracts.is_empty() {
-                                let snapshot = MarketSnapshot { contracts };
-                                let _ = self.sender.send(snapshot);
+                                let _ = self.sender.send(MarketSnapshot { contracts });
+                            } else {
+                                tracing::warn!("No active BTC markets found in this poll");
                             }
-                        } else {
-                            warn!("Failed to parse Polymarket JSON response");
                         }
-                    } else {
-                        warn!("Polymarket API returned status: {}", response.status());
+                        Err(e) => tracing::warn!("Failed to parse gamma API response: {}", e),
                     }
                 }
-                Err(e) => {
-                    error!("Error fetching from Polymarket: {}", e);
-                }
+                Ok(r) => tracing::warn!("Gamma API returned status: {}", r.status()),
+                Err(e) => tracing::error!("Gamma API request failed: {}", e),
             }
 
             let elapsed = start.elapsed().unwrap_or(Duration::from_millis(0));
